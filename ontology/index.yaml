@@ -1,0 +1,45 @@
+# Ontology Index
+# 도메인 목록과 비즈니스 위계. 이 파일이 탐색의 진입점.
+# Claude는 매 요청 시 이 파일을 먼저 읽고, 관련 도메인 파일로 이동한다.
+
+domains:
+  - id: commerce-catalog
+    path: 이커머스/상품-카탈로그
+    file: abox/commerce-catalog.yaml
+    summary: 상품 등록·분류·가격 관리·검색 노출을 다루는 카탈로그 도메인
+    repos:
+      - example-catalog-api
+      - example-catalog-worker
+    infra:
+      - mysql
+      - redis
+      - kafka
+      - s3
+      - elasticsearch
+      - cloudfront
+
+  - id: commerce-order
+    path: 이커머스/주문-결제
+    file: abox/commerce-order.yaml
+    summary: 주문 생성·결제·환불·쿠폰 적용을 다루는 도메인
+    repos:
+      - example-order-api
+    infra:
+      - mysql
+      - redis
+      - kafka
+
+  - id: commerce-inventory
+    path: 이커머스/재고-관리
+    file: abox/commerce-inventory.yaml
+    summary: 재고 점유·확정·입출고·저재고 알림을 다루는 도메인
+    repos:
+      - example-inventory-api
+      - example-inventory-worker
+    infra:
+      - mysql
+      - redis
+      - kafka
+
+cross_domain: abox/cross-domain.yaml
+shared_infra: abox/infra.yaml

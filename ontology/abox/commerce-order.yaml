@@ -1,0 +1,161 @@
+# commerce-order 도메인
+# 주문 생성·결제·환불·쿠폰 적용을 다루는 도메인.
+
+domain:
+  id: commerce-order
+  name: 주문/결제
+  summary: |
+    장바구니에서 시작한 주문을 검증·생성하고, PG를 통해 결제 처리하고,
+    환불 시나리오를 관리한다. 쿠폰은 주문 단계에서 검증·적용된다.
+    상품 정보·재고 점유는 다른 도메인(catalog, inventory)에 위임한다.
+  wiki_root: wiki/commerce-order/
+
+entities:
+  # ── processes ────────────────────────────────────────────────
+  - id: order-placement
+    name: 주문 생성 파이프라인
+    type: process
+    summary: |
+      장바구니 데이터를 받아 주문을 생성한다. 가격 재검증, 쿠폰 적용,
+      재고 점유 요청(다른 도메인)을 거쳐 order 레코드를 작성하고
+      결제 처리로 인계한다.
+    repo: example-order-api
+    package: src/placement
+    wiki_doc: wiki/commerce-order/주문-생성/README.md
+
+  - id: payment-processing
+    name: 결제 처리
+    type: process
+    summary: |
+      PG 게이트웨이를 호출하여 결제를 시도하고, 결과에 따라 payment
+      상태를 갱신한다. 결제 성공·실패·취소 시 order-event를 발행한다.
+    repo: example-order-api
+    package: src/payment
+    wiki_doc: wiki/commerce-order/결제-흐름/README.md
+
+  - id: refund-pipeline
+    name: 환불 파이프라인
+    type: process
+    summary: |
+      환불 요청을 검토·승인하고, PG를 통해 결제 수단별로 환불을 진행한다.
+      전체/부분 환불 모두 지원한다.
+    repo: example-order-api
+    package: src/refund
+    wiki_doc: wiki/commerce-order/환불-정책/README.md
+
+  # ── data ─────────────────────────────────────────────────────
+  - id: order
+    name: 주문
+    type: data
+    summary: |
+      주문 본체. 주문자, 상품 라인, 결제 금액, 상태(pending/paid/refunded/cancelled),
+      적용된 쿠폰 ID, 생성 시각을 가진다. 결제 레코드를 owns 관계로 보유한다.
+    repo: example-order-api
+    package: src/domain/order
+    wiki_doc: wiki/commerce-order/주문-생성/README.md
+
+  - id: payment
+    name: 결제
+    type: data
+    summary: |
+      결제 레코드. PG 거래 ID, 결제 수단(카드/계좌/포인트), 결제 금액,
+      상태(pending/captured/failed/refunded)를 가진다. 한 주문에 여러 결제가
+      가능(분할 결제, 부분 환불 시 잔여 결제).
+    repo: example-order-api
+    package: src/domain/payment
+    wiki_doc: wiki/commerce-order/결제-흐름/README.md
+
+  - id: coupon
+    name: 쿠폰
+    type: data
+    summary: |
+      쿠폰 정책 정의(할인율/금액, 사용 조건, 유효 기간, 발급 수량 제한).
+      개별 사용자의 보유·사용 이력은 별도 테이블에서 관리한다.
+    repo: example-order-api
+    package: src/domain/coupon
+    wiki_doc: wiki/commerce-order/쿠폰-규칙/README.md
+
+  - id: order-event
+    name: 주문 이벤트
+    type: data
+    summary: |
+      주문 라이프사이클 이벤트(order_created, paid, cancelled, refunded). Kafka
+      토픽에 적재되어 다른 도메인(재고, 정산, CRM)이 구독한다.
+    repo: example-order-api
+    package: src/domain/event
+
+  # ── external ─────────────────────────────────────────────────
+  - id: pg-gateway
+    name: PG 게이트웨이
+    type: external
+    summary: |
+      외부 결제 대행사(PG). 카드/계좌/간편결제 등 결제 수단별로 다른 PG에
+      연결된다. 결제·환불·취소 API를 제공한다.
+
+relations:
+  # 주문 생성 흐름
+  - from: order-placement
+    to: order
+    type: produces
+  - from: order-placement
+    to: coupon
+    type: consumes
+    note: 쿠폰 코드 검증 및 할인 금액 계산
+  - from: order-placement
+    to: order-event
+    type: produces
+    note: order_created 이벤트 발행
+  - from: order-placement
+    to: payment-processing
+    type: triggers
+  - from: order-placement
+    to: redis
+    type: depends_on
+    note: 쿠폰 사용량 카운터 (동시 사용 제어)
+
+  # 결제 흐름
+  - from: payment-processing
+    to: payment
+    type: produces
+  - from: payment-processing
+    to: pg-gateway
+    type: references
+    note: 결제 수단별 PG API 호출
+  - from: payment-processing
+    to: order-event
+    type: produces
+    note: paid 또는 payment_failed 이벤트
+
+  # 환불 흐름
+  - from: refund-pipeline
+    to: payment
+    type: consumes
+    note: 기존 결제 레코드를 기반으로 환불 처리
+  - from: refund-pipeline
+    to: pg-gateway
+    type: references
+    note: PG 환불 API 호출
+  - from: refund-pipeline
+    to: order-event
+    type: produces
+    note: refunded 이벤트 발행
+
+  # 데이터 구조
+  - from: order
+    to: payment
+    type: owns
+
+  # 인프라 배포
+  - from: order
+    to: mysql
+    type: deployed_in
+  - from: payment
+    to: mysql
+    type: deployed_in
+  - from: coupon
+    to: mysql
+    type: deployed_in
+  - from: order-event
+    to: kafka
+    type: deployed_in
+    note: commerce.order.* 토픽 그룹

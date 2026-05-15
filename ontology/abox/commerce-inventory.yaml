@@ -1,0 +1,154 @@
+# commerce-inventory 도메인
+# 상품의 재고 수량, 점유, 입고·출고를 관리하는 도메인.
+
+domain:
+  id: commerce-inventory
+  name: 재고 관리
+  summary: |
+    상품의 현재 재고를 유지하고, 주문 시 점유(reserve)·확정(commit)·해제(release)
+    하는 라이프사이클을 관리한다. 입고·출고·실사 이력을 보관하고, 저재고 상태를
+    감지해 알림을 발행한다.
+  wiki_root: wiki/commerce-inventory/
+
+entities:
+  # ── processes ────────────────────────────────────────────────
+  - id: stock-reservation
+    name: 재고 점유
+    type: process
+    summary: |
+      주문 생성 시점에 재고를 임시 점유(reserve)한다. TTL이 적용된 Redis 분산 락
+      기반으로 동시성 충돌을 방지한다. 결제 완료 또는 TTL 만료 시 stock-fulfillment
+      또는 자동 해제로 전이된다.
+    repo: example-inventory-api
+    package: src/reservation
+    wiki_doc: wiki/commerce-inventory/재고-점유-흐름/README.md
+
+  - id: stock-fulfillment
+    name: 재고 확정/복원
+    type: process
+    summary: |
+      주문 도메인의 결제/환불 이벤트를 구독해 점유 재고를 확정(commit)하거나
+      복원(release)한다. paid 이벤트 → 확정, refunded 이벤트 → 복원.
+    repo: example-inventory-worker
+    package: src/fulfillment
+    wiki_doc: wiki/commerce-inventory/재고-점유-흐름/README.md
+
+  - id: stock-replenishment
+    name: 입고 처리
+    type: process
+    summary: |
+      셀러가 새 재고를 입고하거나 실사 결과로 수량을 조정할 때 stock 본체를
+      갱신하고 stock-movement에 이력을 적재한다. 입고는 양수, 폐기/조정은 음수
+      이동으로 기록된다.
+    repo: example-inventory-api
+    package: src/replenishment
+    wiki_doc: wiki/commerce-inventory/입고-출고-처리/README.md
+
+  - id: low-stock-alert
+    name: 저재고 알림
+    type: process
+    summary: |
+      재고가 임계값(셀러 설정 또는 기본 5개) 미만으로 떨어지면 셀러에게 알림을
+      발행한다. stock 변경 시점에 트리거되며, 알림은 Kafka 이벤트로 발행되어
+      별도 알림 서비스가 처리한다.
+    repo: example-inventory-worker
+    package: src/alert
+    wiki_doc: wiki/commerce-inventory/저재고-알림/README.md
+
+  # ── data ─────────────────────────────────────────────────────
+  - id: stock
+    name: 재고
+    type: data
+    summary: |
+      상품별 재고 수량의 현재 상태. 전체 수량(total), 점유 수량(reserved),
+      가용 수량(available = total - reserved)을 가진다. 가용 수량이 0 이상이어야
+      신규 점유가 가능하다.
+    repo: example-inventory-api
+    package: src/domain/stock
+    wiki_doc: wiki/commerce-inventory/재고-점유-흐름/README.md
+
+  - id: stock-reservation-record
+    name: 재고 점유 기록
+    type: data
+    summary: |
+      각 점유 시도의 단기 기록. order_id, 상품 ID, 수량, TTL을 가진다.
+      Redis에 저장되어 TTL 만료 시 자동 정리되고, 확정 시 stock-movement로
+      옮겨진다.
+    repo: example-inventory-api
+    package: src/domain/reservation
+
+  - id: stock-movement
+    name: 재고 이동 이력
+    type: data
+    summary: |
+      재고 증감의 영구 이력. 사유(reservation, fulfillment, refund, replenishment,
+      adjustment), 수량, 시각, 처리자를 가진다. 정합성 점검과 감사 추적의 기준이
+      된다.
+    repo: example-inventory-api
+    package: src/domain/movement
+    wiki_doc: wiki/commerce-inventory/입고-출고-처리/README.md
+
+relations:
+  # 점유 흐름
+  - from: stock-reservation
+    to: stock
+    type: depends_on
+    note: 가용 수량 확인 후 점유
+  - from: stock-reservation
+    to: stock-reservation-record
+    type: produces
+  - from: stock-reservation
+    to: redis
+    type: depends_on
+    note: 분산 락으로 동시성 차단
+
+  # 확정/복원 흐름
+  - from: stock-fulfillment
+    to: stock-reservation-record
+    type: consumes
+    note: 점유 기록을 영구 이력으로 전환
+  - from: stock-fulfillment
+    to: stock
+    type: produces
+    note: 가용 수량 갱신
+  - from: stock-fulfillment
+    to: stock-movement
+    type: produces
+  - from: stock-fulfillment
+    to: low-stock-alert
+    type: triggers
+    note: 잔여 수량이 임계값 미만이면
+
+  # 입고/조정
+  - from: stock-replenishment
+    to: stock
+    type: produces
+  - from: stock-replenishment
+    to: stock-movement
+    type: produces
+
+  # 저재고 알림
+  - from: low-stock-alert
+    to: stock
+    type: consumes
+  - from: low-stock-alert
+    to: kafka
+    type: produces
+    note: commerce.inventory.low_stock 이벤트
+
+  # 데이터 구조
+  - from: stock
+    to: stock-movement
+    type: owns
+
+  # 인프라 배포
+  - from: stock
+    to: mysql
+    type: deployed_in
+  - from: stock-reservation-record
+    to: redis
+    type: deployed_in
+    note: TTL 기반 자동 정리
+  - from: stock-movement
+    to: mysql
+    type: deployed_in

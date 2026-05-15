@@ -1,0 +1,172 @@
+# commerce-catalog 도메인
+# 상품을 등록·분류하고, 가격·이미지를 관리하며, 검색에 노출시키는 카탈로그 도메인.
+
+domain:
+  id: commerce-catalog
+  name: 상품 카탈로그
+  summary: |
+    셀러가 입력한 상품 데이터를 검수·정규화하여 MySQL에 저장하고,
+    이미지는 S3, 가격은 별도 테이블에 분리 저장하며, Kafka 이벤트를 통해
+    Elasticsearch 검색 인덱스에 비동기 반영한다.
+  wiki_root: wiki/commerce-catalog/
+
+entities:
+  # ── processes ────────────────────────────────────────────────
+  - id: catalog-registration
+    name: 상품 등록 파이프라인
+    type: process
+    summary: |
+      셀러가 입력한 상품 데이터를 검수하여 MySQL에 저장하는 파이프라인.
+      이미지를 S3에 업로드, 가격을 분리 저장, 카테고리를 매핑하고, 처리 완료 시
+      Kafka로 상품 변경 이벤트(commerce.catalog.product.changed)를 발행한다.
+    repo: example-catalog-api
+    package: src/registration
+    wiki_doc: wiki/commerce-catalog/상품-등록/README.md
+
+  - id: search-index-sync
+    name: 검색 인덱스 동기화
+    type: process
+    summary: |
+      MySQL 상품 변경을 Kafka 이벤트로 수신하여 Elasticsearch에 정규화된
+      검색 문서를 반영하는 컨슈머. 가격·카테고리 변경도 같은 경로로 처리한다.
+    repo: example-catalog-worker
+    package: src/search_index
+    wiki_doc: wiki/commerce-catalog/검색-노출-규칙/README.md
+
+  - id: price-update-pipeline
+    name: 가격 변경 파이프라인
+    type: process
+    summary: |
+      단건 가격 변경, 시즌 할인 일괄 적용, 정가 인상/인하 등을 처리한다.
+      변경된 가격은 price 테이블에 반영되며 검색 노출 가격도 즉시 갱신된다.
+    repo: example-catalog-api
+    package: src/pricing
+    wiki_doc: wiki/commerce-catalog/가격-정책/README.md
+
+  # ── data ─────────────────────────────────────────────────────
+  - id: product
+    name: 상품
+    type: data
+    summary: |
+      카탈로그의 핵심 데이터. 상품명, 설명, 셀러, 노출 상태, 등록일 등을 가진다.
+      이미지/가격/카테고리는 별도 entity로 분리되고 owns/part_of 관계로 연결된다.
+    repo: example-catalog-api
+    package: src/domain/product
+    wiki_doc: wiki/commerce-catalog/상품-등록/README.md
+
+  - id: category
+    name: 카테고리
+    type: data
+    summary: |
+      상품을 분류하는 트리 구조. 깊이 최대 3단계, 리프 노드만 상품을 보유할 수
+      있다. 한 상품은 최대 2개 카테고리에 매핑된다.
+    repo: example-catalog-api
+    package: src/domain/category
+    wiki_doc: wiki/commerce-catalog/카테고리-구조/README.md
+
+  - id: product-image
+    name: 상품 이미지
+    type: data
+    summary: |
+      상품 이미지 메타데이터(파일 경로, 크기, 순서). 원본 파일은 S3 비공개 버킷,
+      외부 노출은 CloudFront를 통해 진행된다.
+    repo: example-catalog-api
+    package: src/domain/image
+
+  - id: price
+    name: 가격
+    type: data
+    summary: |
+      정가, 할인가, 할인 적용 기간을 보관한다. 한 상품은 동시에 여러 가격 정책
+      (시즌 할인, 쿠폰)을 가질 수 있고, 노출 시점에 우선순위 규칙으로 최종 가격이
+      계산된다.
+    repo: example-catalog-api
+    package: src/domain/price
+    wiki_doc: wiki/commerce-catalog/가격-정책/README.md
+
+  - id: search-index-document
+    name: 검색 인덱스 문서
+    type: data
+    summary: |
+      검색용 정규화 문서. 상품 기본 정보, 카테고리 경로, 노출 가격, 검색 키워드,
+      가중치 신호를 포함한다. Elasticsearch 단일 도큐먼트 단위에 대응한다.
+    repo: example-catalog-worker
+    package: src/search_index/document
+    wiki_doc: wiki/commerce-catalog/검색-노출-규칙/README.md
+
+relations:
+  # 상품 등록 → 도메인 데이터 생성
+  - from: catalog-registration
+    to: product
+    type: produces
+  - from: catalog-registration
+    to: product-image
+    type: produces
+  - from: catalog-registration
+    to: price
+    type: produces
+  - from: catalog-registration
+    to: kafka
+    type: produces
+    note: commerce.catalog.product.changed 이벤트 발행
+
+  # 검색 동기화
+  - from: search-index-sync
+    to: kafka
+    type: consumes
+    note: commerce.catalog.product.changed 토픽 구독
+  - from: search-index-sync
+    to: product
+    type: consumes
+    note: 이벤트 수신 후 MySQL에서 최신 본문 로딩
+  - from: search-index-sync
+    to: search-index-document
+    type: produces
+
+  # 가격 변경
+  - from: price-update-pipeline
+    to: price
+    type: produces
+  - from: price-update-pipeline
+    to: search-index-sync
+    type: triggers
+    note: 가격 변경 후 검색 노출 가격 재반영
+
+  # 데이터 간 구조
+  - from: product
+    to: category
+    type: part_of
+  - from: product
+    to: product-image
+    type: owns
+  - from: product
+    to: price
+    type: owns
+
+  # 인프라 배포
+  - from: product
+    to: mysql
+    type: deployed_in
+  - from: category
+    to: mysql
+    type: deployed_in
+  - from: price
+    to: mysql
+    type: deployed_in
+  - from: product-image
+    to: s3
+    type: deployed_in
+    note: 원본 이미지 파일. 메타데이터는 mysql에 별도 저장
+  - from: search-index-document
+    to: elasticsearch
+    type: deployed_in
+
+  # 운영 의존성
+  - from: catalog-registration
+    to: cloudfront
+    type: depends_on
+    note: 상품 이미지의 외부 노출은 CloudFront를 통해 진행
+  - from: catalog-registration
+    to: redis
+    type: depends_on
+    note: 카테고리 매핑·검수 룰 캐시 조회

@@ -1,0 +1,192 @@
+@import "tailwindcss";
+
+html, body {
+  overscroll-behavior: none;
+}
+
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0a0a0b;
+  --bg-card: #141416;
+  --bg-hover: #1a1a1e;
+  --bg-sidebar: #111113;
+  --bg-code: #18181b;
+  --bg-dot-grid: #1a1a1e;
+  --bg-tag: rgba(255, 255, 255, 0.06);
+  --border: #232328;
+  --border-hover: #3a3a42;
+  --text-primary: #e4e4e7;
+  --text-muted: #71717a;
+  --text-dim: #52525b;
+  --text-code: #d4d4d8;
+  --accent: #3182f6;
+  --accent-dim: rgba(49, 130, 246, 0.12);
+  --node-process: #60a5fa;
+  --node-data: #34d399;
+  --node-external: #a1a1aa;
+  --node-infra: #fb923c;
+  --node-table: #c084fc;
+  --shadow-node: 0 4px 24px rgba(0, 0, 0, 0.3);
+  --shadow-accent: 0 0 0 1px var(--accent), 0 4px 24px rgba(49, 130, 246, 0.15);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --bg-card: #fafafa;
+  --bg-hover: #f4f4f5;
+  --bg-sidebar: #fafafa;
+  --bg-code: #f4f4f5;
+  --bg-dot-grid: #e4e4e7;
+  --bg-tag: rgba(0, 0, 0, 0.05);
+  --border: #e4e4e7;
+  --border-hover: #c7c7cd;
+  --text-primary: #18181b;
+  --text-muted: #52525b;
+  --text-dim: #a1a1aa;
+  --text-code: #27272a;
+  --accent: #3182f6;
+  --accent-dim: rgba(49, 130, 246, 0.10);
+  --node-process: #2563eb;
+  --node-data: #059669;
+  --node-external: #71717a;
+  --node-infra: #ea580c;
+  --node-table: #9333ea;
+  --shadow-node: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-accent: 0 0 0 1px var(--accent), 0 4px 16px rgba(49, 130, 246, 0.18);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-card: var(--bg-card);
+  --color-bg-hover: var(--bg-hover);
+  --color-bg-sidebar: var(--bg-sidebar);
+  --color-bg-code: var(--bg-code);
+  --color-bg-tag: var(--bg-tag);
+  --color-border: var(--border);
+  --color-border-hover: var(--border-hover);
+  --color-text-primary: var(--text-primary);
+  --color-text-muted: var(--text-muted);
+  --color-text-dim: var(--text-dim);
+  --color-text-code: var(--text-code);
+  --color-accent: var(--accent);
+  --color-accent-dim: var(--accent-dim);
+  --color-node-process: var(--node-process);
+  --color-node-data: var(--node-data);
+  --color-node-external: var(--node-external);
+  --color-node-infra: var(--node-infra);
+  --color-node-table: var(--node-table);
+}
+
+/* 도트 그리드 배경 (그래프 페이지) — 테마 변수 기반 */
+.bg-dot-grid {
+  background-image: radial-gradient(circle at 1px 1px, var(--bg-dot-grid) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+/* Wiki markdown styles */
+.wiki-content h1 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin-bottom: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.wiki-content h2 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 32px 0 12px;
+}
+
+.wiki-content h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 24px 0 8px;
+}
+
+.wiki-content p {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.8;
+  margin-bottom: 16px;
+}
+
+.wiki-content ul,
+.wiki-content ol {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.8;
+  margin-bottom: 16px;
+  padding-left: 24px;
+}
+
+.wiki-content li {
+  margin-bottom: 4px;
+}
+
+.wiki-content pre {
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px;
+  font-size: 13px;
+  color: var(--text-code);
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+
+.wiki-content code {
+  font-size: 13px;
+  background: var(--bg-code);
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: var(--text-code);
+}
+
+.wiki-content pre code {
+  background: none;
+  padding: 0;
+}
+
+.wiki-content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.wiki-content th {
+  text-align: left;
+  padding: 10px 12px;
+  background: var(--bg-code);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+
+.wiki-content td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.wiki-content tr:hover td {
+  background: var(--bg-hover);
+}
+
+.wiki-content blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 16px;
+  margin: 0 0 16px;
+  color: var(--text-dim);
+}
+
+.wiki-content hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 24px 0;
+}

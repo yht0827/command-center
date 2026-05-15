@@ -1,0 +1,116 @@
+name: Deploy site to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths: [wiki/**, ontology/**, site/**, .github/workflows/deploy-pages.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  pull-requests: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: |
+          cd site
+          npm ci
+
+      - name: Run tests
+        run: |
+          cd site
+          npm test
+
+      - name: Build data (ontology + wiki → JSON)
+        run: |
+          cd site
+          node scripts/build-data.mjs
+
+      - name: Build site
+        run: |
+          cd site
+          npx vite build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Update README with deployment URL
+        if: success() && steps.deployment.outputs.page_url
+        id: update-readme
+        env:
+          URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -e
+          NEW_CONTENT="🌐 **Live demo**: ${URL}"
+          awk -v new="$NEW_CONTENT" '
+            /<!-- deployed-url:start -->/ { print; print new; skip=1; next }
+            /<!-- deployed-url:end -->/   { skip=0; print; next }
+            skip { next }
+            { print }
+          ' README.md > README.md.tmp
+          if diff -q README.md README.md.tmp > /dev/null 2>&1; then
+            rm README.md.tmp
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            mv README.md.tmp README.md
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open auto-merge PR with new URL
+        if: steps.update-readme.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -e
+          BRANCH="bot/update-deployed-url"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add README.md
+          git commit -m "docs: 배포 URL을 README에 자동 갱신" -m "Deployed URL: ${URL}"
+          git push -f origin "$BRANCH"
+
+          cat > /tmp/pr-body.md <<EOF
+          \`Deploy site to GitHub Pages\` 워크플로우가 자동으로 생성한 PR입니다.
+
+          새 배포 URL: ${URL}
+
+          머지되면 README 상단의 \`deployed-url\` 마커 사이 내용이 위 URL로 갱신됩니다.
+          EOF
+
+          EXISTING=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
+          if [ -z "$EXISTING" ]; then
+            gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "docs: 배포 URL을 README에 자동 갱신" \
+              --body-file /tmp/pr-body.md
+            EXISTING=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number')
+          else
+            gh pr edit "$EXISTING" --body-file /tmp/pr-body.md
+          fi
+
+          gh pr merge "$EXISTING" --merge --auto || gh pr merge "$EXISTING" --merge || true

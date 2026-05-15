@@ -1,0 +1,77 @@
+{
+  "minRuntime": {
+    "node": 20,
+    "description": "훅과 statusline mjs 스크립트의 최소 Node 메이저 버전. config.mjs가 이 값을 읽어 미달이면 가드별 정책(PreToolUse: fail-close, SessionStart: fail-open+메시지, PermissionRequest: pass-through)을 적용한다."
+  },
+  "issueKey": {
+    "pattern": "^[A-Z]+-[0-9]+$",
+    "description": "대문자 영문 1자 이상 + '-' + 숫자 1자 이상 (e.g., JIRA-123, AFS-6)"
+  },
+  "sensitiveFilePatterns": [
+    ".env*",
+    "*.key",
+    "*.pem",
+    "credentials*",
+    "*secret*"
+  ],
+  "buildArtifactPatterns": [
+    "build/",
+    ".gradle/",
+    "node_modules/",
+    "dist/",
+    "__pycache__/",
+    ".venv/"
+  ],
+  "timeouts": {
+    "lint": 300000,
+    "test": 300000,
+    "build": 300000,
+    "network": 120000,
+    "install": 300000
+  },
+  "projectTypes": {
+    "kotlin-java": {
+      "detect": ["build.gradle.kts", "build.gradle"],
+      "lint": "./gradlew ktlintFormat",
+      "test": "./gradlew test"
+    },
+    "nodejs": {
+      "detect": ["package.json"],
+      "lint": "bun run lint --fix | npm run lint -- --fix",
+      "test": "bun run test | npm test",
+      "runtimeDetect": "which bun → bun, 없으면 npm"
+    },
+    "python": {
+      "detect": ["pyproject.toml", "setup.py"],
+      "lint": "ruff format .",
+      "test": "pytest --tb=short"
+    }
+  },
+  "contextLimits": {
+    "product-owner": { "maxInputLines": 500, "note": "PRD 작성에 필요한 요구사항 + 코드 맵" },
+    "architect": { "maxInputLines": 1000, "note": "PRD + 코드 맵 + 참조 코드" },
+    "design-critic": { "maxInputLines": 800, "note": "설계서 + PRD + 코드 맵" },
+    "coder": { "maxInputLines": 2000, "note": "설계서 + 코드 맵 + 참조 코드가 가장 큼" },
+    "qa-manager": { "maxInputLines": 1500, "note": "diff가 클 수 있음" },
+    "security-auditor": { "maxInputLines": 1500, "note": "PRD + 설계서 + diff" },
+    "researcher": { "maxInputLines": 1000, "note": "조사 요청 + 코드 맵" },
+    "hacker": { "maxInputLines": 800, "note": "정체 상황 + 코드 맵" },
+    "simplifier": { "maxInputLines": 1000, "note": "정체 상황 + 설계서 + PRD + 코드 맵" }
+  },
+  "isolation": {
+    "structure": {
+      "main": "main/",
+      "worktrees": "worktrees/",
+      "projectsDir": "projects/"
+    },
+    "envFiles": [
+      ".env",
+      ".env.local",
+      ".env.development",
+      ".nvmrc",
+      ".node-version",
+      ".npmrc",
+      ".tool-versions"
+    ]
+  }
+}

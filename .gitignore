@@ -1,0 +1,15 @@
+.DS_Store
+.claude/settings.local.json
+
+projects/*
+!projects/.gitkeep
+
+worktrees/
+
+# 스킬 세션 데이터 (임시)
+.lens/
+.slack-digest/
+
+# slack-digest state (영속 but 개인)
+.claude/skills/slack-digest/state/*
+!.claude/skills/slack-digest/state/.gitkeep

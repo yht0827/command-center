@@ -1,0 +1,95 @@
+{
+  "env": {
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-sonnet-4-6[1m]"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(node *)",
+      "Bash(python3 *)",
+      "Bash(pip3 *)",
+
+      "Bash(mysql *)",
+      "Bash(brew *)",
+      "Bash(claude *)",
+      "Bash(unzip *)",
+      "Bash(jar *)",
+      "Bash(javap *)",
+
+      "Bash(agent-browser *)",
+      "Bash(npx agent-browser *)",
+
+      "Skill(worktree)",
+      "Skill(commit)",
+      "Skill(pull-request)",
+      "Skill(maker-pr)",
+      "Skill(humanizer)",
+      "Skill(new-domain)",
+      "Skill(domain-audit)",
+      "Skill(domain-cleanup)",
+      "Skill(lens)",
+      "Skill(sync-projects)",
+      "Skill(dev)",
+      "Skill(slack-digest)",
+      "Skill(agent-browser)",
+
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:docs.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
+    ],
+    "deny": [
+      "Bash(*gh pr merge*)",
+      "Bash(*gh pr close*)",
+      "Bash(*gh issue close*)",
+      "Bash(*git push --force *)",
+      "Bash(*git push -f *)"
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "node ${CLAUDE_PROJECT_DIR}/.claude/statusline/index.mjs"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PROJECT_DIR}/.claude/hooks/branch-guard.mjs"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-tool-use.mjs"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PROJECT_DIR}/.claude/hooks/permission-handler.mjs"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PROJECT_DIR}/.claude/hooks/session-start.mjs"
+          }
+        ]
+      }
+    ]
+  }
+}

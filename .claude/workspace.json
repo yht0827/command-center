@@ -1,0 +1,10 @@
+{
+  "team": "hubtwork",
+  "ghe_host": "github.com",
+  "projects": {
+    "required": [],
+    "optional": [
+      { "repo": "hubtwork/loopers-blog-articles", "desc": "루퍼스 인블로그 아티클 저장소" }
+    ]
+  }
+}
